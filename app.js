@@ -32,20 +32,24 @@ const user = {
 
 // Middleware для проверки JWT
 const authenticateJWT = (req, res, next) => {
-  const token = req.cookies.token;
-
-  if (token) {
-    jwt.verify(token, JWT_SECRET, (err, decodedUser) => {
-      if (err) {
-        return res.redirect('/');
-      }
-      req.user = decodedUser;
-      next();
-    });
-  } else {
-    res.redirect('/');
-  }
-};
+    const token = req.cookies.token;
+    console.log('Token from cookie:', token);
+  
+    if (token) {
+      jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) {
+          console.log('JWT verification failed:', err);
+          return res.redirect('/');
+        }
+        req.user = user;
+        console.log('User authenticated:', user);
+        next();
+      });
+    } else {
+      console.log('No token found, redirecting to login');
+      res.redirect('/');
+    }
+  };
 
 // Middleware для проверки роли
 const checkRole = (role) => {
@@ -128,16 +132,20 @@ app.get('/', (req, res) => {
 });
 
 app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-
-  if (username === user.username && await bcrypt.compare(password, user.password)) {
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
-    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
-    res.redirect('/dashboard');
-  } else {
-    res.render('login', { error: 'Неверное имя пользователя или пароль.' });
-  }
-});
+    const { username, password } = req.body;
+  
+    if (username === user.username && await bcrypt.compare(password, user.password)) {
+      const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
+      res.cookie('token', token, { 
+        httpOnly: true, 
+        secure: process.env.NODE_ENV === 'production' ? false : true,
+        sameSite: 'strict'
+      });
+      res.redirect('/dashboard');
+    } else {
+      res.render('login', { error: 'Неверное имя пользователя или пароль.' });
+    }
+  });
 
 app.get('/dashboard', authenticateJWT, async (req, res) => {
     const dir = getDataDir();
