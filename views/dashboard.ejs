@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель управления</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    
+    
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Добро пожаловать, <%= username %>!</h1>
+            <a href="/logout" class="logout-btn">Выйти</a>
+        </header>
+        
+        <section class="upload-section">
+            <h2>Загрузить файл</h2>
+            <form action="/upload" method="POST" enctype="multipart/form-data">
+                <input type="file" name="file" id="file" required>
+                <label for="file" class="file-label">Выберите файл</label>
+                <button type="submit">Загрузить</button>
+            </form>
+        </section>
+
+        <section class="files-section">
+            <h2>Ваши файлы</h2>
+            <div class="file-grid">
+                <% files.forEach(file => { %>
+                    <div class="file-item">
+                        <div class="file-preview">
+                            <% 
+                            const fileExtension = file.split('.').pop().toLowerCase();
+                            let iconClass = 'fas fa-file'; // Иконка по умолчанию
+                            
+                            if (['jpeg', 'jpg', 'gif', 'png'].includes(fileExtension)) { %>
+                                <img src="/download/<%= file %>" alt="<%= file %>">
+                            <% } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) { %>
+                                <video src="/download/<%= file %>" controls></video>
+                            <% } else if (['mp3', 'wav'].includes(fileExtension)) { %>
+                                <audio src="/download/<%= file %>" controls></audio>
+                            <% } else {
+                                switch(fileExtension) {
+                                    case 'pdf':
+                                        iconClass = 'fas fa-file-pdf';
+                                        break;
+                                    case 'doc':
+                                    case 'docx':
+                                        iconClass = 'fas fa-file-word';
+                                        break;
+                                    case 'xls':
+                                    case 'xlsx':
+                                        iconClass = 'fas fa-file-excel';
+                                        break;
+                                    case 'ppt':
+                                    case 'pptx':
+                                        iconClass = 'fas fa-file-powerpoint';
+                                        break;
+                                    case 'zip':
+                                    case 'rar':
+                                        iconClass = 'fas fa-file-archive';
+                                        break;
+                                    case 'txt':
+                                        iconClass = 'fas fa-file-alt';
+                                        break;
+                                    default:
+                                        iconClass = 'fas fa-file';
+                                }
+                            %>
+                                <i class="<%= iconClass %>"></i>
+                            <% } %>
+                        </div>
+                        <div class="file-info">
+                            <span class="file-name"><%= file %></span>
+                            <div class="file-actions">
+                                <a href="/download/<%= file %>" class="download-btn" title="Скачать">
+                                    <i class="fas fa-download"></i>
+                                </a>
+                                <form action="/delete/<%= file %>" method="POST" class="delete-form">
+                                    <button type="submit" class="delete-btn" title="Удалить">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                <% }); %>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        document.getElementById('file').addEventListener('change', function(e) {
+            var fileName = e.target.files[0].name;
+            document.querySelector('.file-label').textContent = fileName;
+        });
+    </script>
+</body>
+</html>
