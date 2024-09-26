@@ -4,43 +4,47 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Панель управления</title>
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/dashboard-styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
-    
-    
 </head>
 <body>
-    <div class="container">
+    <div class="dashboard-container">
         <header>
             <h1>Добро пожаловать, <%= username %>!</h1>
-            <a href="/logout" class="logout-btn">Выйти</a>
+            <div>
+                <button class="theme-toggle">Сменить тему</button>
+                <a href="/logout" class="logout-btn">Выйти</a>
+            </div>
         </header>
         
         <section class="upload-section">
-            <h2>Загрузить файл</h2>
-            <form action="/upload" method="POST" enctype="multipart/form-data">
+            <h2><i class="fas fa-cloud-upload-alt"></i> Загрузить файл</h2>
+            <form action="/upload" method="POST" enctype="multipart/form-data" id="upload-form">
                 <input type="file" name="file" id="file" required>
-                <label for="file" class="file-label">Выберите файл</label>
-                <button type="submit">Загрузить</button>
+                <label for="file" class="file-label"><i class="fas fa-file-upload"></i> Выберите файл</label>
+                <button type="submit"><i class="fas fa-upload"></i> Загрузить</button>
             </form>
+            <div id="progress-bar-container" style="display: none;">
+                <div id="progress-bar"></div>
+            </div>
         </section>
 
         <section class="files-section">
-            <h2>Ваши файлы</h2>
+            <h2><i class="fas fa-folder-open"></i> Ваши файлы</h2>
             <div class="file-grid">
                 <% files.forEach(file => { %>
-                    <div class="file-item">
+                    <div class="file-item" data-filename="<%= file %>">
                         <div class="file-preview">
                             <% 
                             const fileExtension = file.split('.').pop().toLowerCase();
-                            let iconClass = 'fas fa-file'; // Иконка по умолчанию
+                            let iconClass = 'fas fa-file';
                             
-                            if (['jpeg', 'jpg', 'gif', 'png'].includes(fileExtension)) { %>
-                                <img src="/download/<%= file %>" alt="<%= file %>">
-                            <% } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) { %>
-                                <video src="/download/<%= file %>" controls></video>
-                            <% } else if (['mp3', 'wav'].includes(fileExtension)) { %>
-                                <audio src="/download/<%= file %>" controls></audio>
+                            if (['jpeg', 'jpg', 'gif', 'png', 'webp'].includes(fileExtension)) { %>
+                                <img src="/download/<%= file %>" alt="<%= file %>" class="preview-image">
+                            <% } else if (['mp4', 'webm', 'ogg', 'mov'].includes(fileExtension)) { %>
+                                <canvas class="video-thumbnail" data-video="/download/<%= file %>"></canvas>
+                            <% } else if (['mp3', 'wav', 'ogg'].includes(fileExtension)) { %>
+                                <i class="fas fa-file-audio"></i>
                             <% } else {
                                 switch(fileExtension) {
                                     case 'pdf':
@@ -60,6 +64,7 @@
                                         break;
                                     case 'zip':
                                     case 'rar':
+                                    case '7z':
                                         iconClass = 'fas fa-file-archive';
                                         break;
                                     case 'txt':
@@ -91,11 +96,136 @@
         </section>
     </div>
 
-    <script>
-        document.getElementById('file').addEventListener('change', function(e) {
-            var fileName = e.target.files[0].name;
-            document.querySelector('.file-label').textContent = fileName;
+    <div id="preview-modal" class="modal">
+        <span class="close">&times;</span>
+        <div id="preview-content"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
+<script>
+    document.getElementById('file').addEventListener('change', function(e) {
+        var fileName = e.target.files[0].name;
+        document.querySelector('.file-label').innerHTML = '<i class="fas fa-file-upload"></i> ' + fileName;
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const canvases = document.querySelectorAll('.video-thumbnail');
+        
+        canvases.forEach(canvas => {
+            const video = document.createElement('video');
+            video.src = canvas.dataset.video;
+            
+            video.onloadeddata = function() {
+                video.currentTime = 1; // Устанавливаем время на 1 секунду для получения кадра
+            };
+
+            video.onseeked = function() {
+                const ctx = canvas.getContext('2d');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(video.src); // Освобождаем память
+            };
         });
-    </script>
+    });
+
+    document.getElementById('upload-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        var formData = new FormData(this);
+        var progressBar = document.getElementById('progress-bar');
+        var progressBarContainer = document.getElementById('progress-bar-container');
+
+        axios.post('/upload', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        }).then(function(response) {
+            progressBarContainer.style.display = 'block';
+            var progress = 0;
+            var interval = setInterval(function() {
+                progress += 10;
+                progressBar.style.width = progress + '%';
+                if (progress >= 100) {
+                    clearInterval(interval);
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 500);
+                }
+            }, 100);
+        }).catch(function(error) {
+            console.error('Error:', error);
+            alert('Произошла ошибка при загрузке файла');
+        });
+    });
+
+    // Обработка клика по файлу
+    document.querySelectorAll('.file-item').forEach(item => {
+        item.addEventListener('click', function(e) {
+            if (e.target.closest('.file-actions')) return;
+            
+            const fileName = this.dataset.filename;
+            const fileExtension = fileName.split('.').pop().toLowerCase();
+            const modal = document.getElementById('preview-modal');
+            const previewContent = document.getElementById('preview-content');
+
+            if (['jpeg', 'jpg', 'gif', 'png', 'webp'].includes(fileExtension)) {
+                previewContent.innerHTML = `<img src="/download/${fileName}" alt="${fileName}" class="preview-image">`;
+            } else if (['mp4', 'webm', 'ogg', 'mov'].includes(fileExtension)) {
+                previewContent.innerHTML = `<video src="/download/${fileName}" controls class="preview-video"></video>`;
+            } else if (['mp3', 'wav', 'ogg'].includes(fileExtension)) {
+                previewContent.innerHTML = `<audio src="/download/${fileName}" controls class="preview-audio"></audio>`;
+            } else {
+                previewContent.innerHTML = `<iframe src="/download/${fileName}" class="preview-iframe"></iframe>`;
+            }
+
+            modal.style.display = 'block';
+        });
+    });
+
+    // Закрытие модального окна
+    document.querySelector('.close').addEventListener('click', closeModal);
+
+    // Закрытие модального окна при клике вне его
+    window.addEventListener('click', function(event) {
+        const modal = document.getElementById('preview-modal');
+        if (event.target == modal) {
+            closeModal();
+        }
+    });
+
+    function closeModal() {
+        const modal = document.getElementById('preview-modal');
+        const previewContent = document.getElementById('preview-content');
+        modal.style.display = 'none';
+        
+        // Остановка видео при закрытии
+        const videoElement = previewContent.querySelector('video');
+        if (videoElement) {
+            videoElement.pause();
+            videoElement.currentTime = 0;
+        }
+    }
+
+    // Добавьте эту функцию в начало вашего скрипта
+function toggleTheme() {
+    document.body.classList.toggle('light-theme');
+    const isDark = !document.body.classList.contains('light-theme');
+    localStorage.setItem('darkTheme', isDark);
+}
+
+// Добавьте эту проверку при загрузке страницы
+document.addEventListener('DOMContentLoaded', (event) => {
+    const isDark = localStorage.getItem('darkTheme') === 'true';
+    if (isDark) {
+        document.body.classList.remove('light-theme');
+    } else {
+        document.body.classList.add('light-theme');
+    }
+});
+
+// Добавьте обработчик события для кнопки переключения темы
+document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
+</script>
 </body>
 </html>

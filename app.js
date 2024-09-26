@@ -10,6 +10,7 @@ const bcrypt = require('bcrypt');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 const config = require('./config');
+const ThumbnailGenerator = require('video-thumbnail-generator').default;
 
 const app = express();
 const port = process.env.PORT || 8080;
@@ -109,7 +110,9 @@ const getDataDir = () => {
   });
   
   app.post('/upload', authenticateJWT, (req, res) => {
-    upload.single('file')(req, res, function (err) {
+    let uploadedFile;
+  
+    upload.single('file')(req, res, async function (err) {
       if (err instanceof multer.MulterError) {
         console.error('Multer error:', err);
         return res.status(500).send('Ошибка при загрузке файла: ' + err.message);
@@ -122,8 +125,35 @@ const getDataDir = () => {
         return res.status(400).send('Файл не был загружен.');
       }
   
+      uploadedFile = req.file;
+  
+      // Генерация thumbnail для видео
+      if (req.file.mimetype.startsWith('video/')) {
+        try {
+          const tg = new ThumbnailGenerator({
+            sourcePath: req.file.path,
+            thumbnailPath: path.join(getDataDir(), 'thumbnails')
+          });
+  
+          const thumbnail = await tg.generateThumbnail({ percentage: 10 });
+          console.log('Thumbnail generated:', thumbnail);
+        } catch (error) {
+          console.error('Error generating thumbnail:', error);
+        }
+      }
+  
       console.log('File uploaded successfully:', req.file);
       res.redirect('/dashboard');
+    });
+  
+    // Обработка прерванной загрузки
+    req.on('aborted', () => {
+      if (uploadedFile) {
+        fs.unlink(uploadedFile.path, (err) => {
+          if (err) console.error('Error deleting incomplete file:', err);
+          else console.log('Incomplete file deleted:', uploadedFile.path);
+        });
+      }
     });
   });
 
