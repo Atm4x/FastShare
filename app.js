@@ -10,6 +10,7 @@ const bcrypt = require('bcrypt');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 const config = require('./config');
+
 const ThumbnailGenerator = require('video-thumbnail-generator').default;
 
 const app = express();
@@ -17,6 +18,8 @@ const port = process.env.PORT || 8080;
 
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
+
+app.use(bodyParser.json());
 app.use(cookieParser());
 app.use(express.static('public'));
 

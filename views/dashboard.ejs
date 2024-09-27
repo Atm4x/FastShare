@@ -387,11 +387,11 @@ function saveTextFile() {
   
   const endpoint = '/create-text-file';
   
-  axios.post(endpoint, { fileName, content }, {
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  })
+  const formData = new FormData();
+  formData.append('fileName', fileName);
+  formData.append('content', content);
+  
+  axios.post(endpoint, formData)
     .then(response => {
       if (response.data.success) {
         closeTextEditor();
