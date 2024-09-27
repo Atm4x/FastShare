@@ -204,7 +204,7 @@ const getDataDir = () => {
   });
 
 // Создание текстового файла
-app.post('/create-text-file', authenticateJWT, async (req, res) => {
+app.post('/create-text-file', authenticateJWT, (req, res) => {
   console.log('Received request to create text file:', req.body);
   
   const { fileName, content } = req.body;
@@ -221,7 +221,7 @@ app.post('/create-text-file', authenticateJWT, async (req, res) => {
   const filePath = path.join(dataDir, fileName);
 
   try {
-    await fs.promises.writeFile(filePath, content || '');
+    fs.promises.writeFile(filePath, content || '');
     console.log('Text file created:', filePath);
     res.json({ success: true });
   } catch (err) {
