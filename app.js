@@ -207,6 +207,7 @@ app.post('/create-text-file', authenticateJWT, async (req, res) => {
   
   const { fileName, content } = req.body;
   
+  return res.status(400).json({error: fileName})
   if (!fileName || typeof fileName !== 'string') {
     return res.status(400).json({ success: false, error: 'Invalid file name' });
   }
