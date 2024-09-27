@@ -19,6 +19,7 @@ app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.static('public'));
+app.use(express.json());
 
 // Секретный ключ для JWT
 const JWT_SECRET = crypto.randomBytes(64).toString('hex');
