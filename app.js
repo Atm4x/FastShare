@@ -19,7 +19,6 @@ app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.static('public'));
-app.use(express.json());
 
 // Секретный ключ для JWT
 const JWT_SECRET = crypto.randomBytes(64).toString('hex');
@@ -207,9 +206,8 @@ app.post('/create-text-file', authenticateJWT, async (req, res) => {
   
   const { fileName, content } = req.body;
   
-  return res.status(400).json({error: fileName})
   if (!fileName || typeof fileName !== 'string') {
-    return res.status(400).json({ success: false, error: 'Invalid file name' });
+    return res.status(400).json({ success: false, error: 'Invalid file name' + fileName + typeof fileName });
   }
 
   const dataDir = getDataDir();
@@ -234,7 +232,7 @@ app.post('/update-text-file', authenticateJWT, async (req, res) => {
   const { fileName, content } = req.body;
   
   if (!fileName || typeof fileName !== 'string') {
-    return res.status(400).json({ success: false, error: 'Invalid file name' });
+    return res.status(400).json({ success: false, error: 'Invalid file name'});
   }
 
   const dataDir = getDataDir();
