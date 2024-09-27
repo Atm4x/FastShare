@@ -79,20 +79,36 @@
                         </div>
                         <div class="file-info">
                             <span class="file-name"><%= file %></span>
+                            <input type="text" class="file-rename-input" style="display:none;" value="<%= file %>">
                             <div class="file-actions">
-                                <a href="/download/<%= file %>" class="download-btn" title="Скачать">
-                                    <i class="fas fa-download"></i>
-                                </a>
-                                <form action="/delete/<%= file %>" method="POST" class="delete-form">
-                                    <button type="submit" class="delete-btn" title="Удалить">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>
-                                </form>
+                              <button class="rename-btn" title="Переименовать">
+                                <i class="fas fa-edit"></i>
+                              </button>
+                              <a href="/download/<%= file %>" class="download-btn" title="Скачать">
+                                <i class="fas fa-download"></i>
+                              </a>
+                              <form action="/delete/<%= file %>" method="POST" class="delete-form">
+                                <button type="submit" class="delete-btn" title="Удалить">
+                                  <i class="fas fa-trash-alt"></i>
+                                </button>
+                              </form>
                             </div>
-                        </div>
+                          </div>
                     </div>
                 <% }); %>
             </div>
+
+            <button id="create-text-file-btn" class="btn">Создать текстовый файл</button>
+
+            <div id="text-editor-modal" class="modal">
+                <div class="modal-content">
+                  <h2 id="text-editor-title">Создать текстовый файл</h2>
+                  <input type="text" id="text-file-name" placeholder="Имя файла">
+                  <textarea id="text-file-content"></textarea>
+                  <button id="save-text-file-btn">Сохранить</button>
+                  <button id="close-text-editor-btn">Закрыть</button>
+                </div>
+              </div>
         </section>
     </div>
 
@@ -161,27 +177,34 @@
 
     // Обработка клика по файлу
     document.querySelectorAll('.file-item').forEach(item => {
-        item.addEventListener('click', function(e) {
-            if (e.target.closest('.file-actions')) return;
-            
-            const fileName = this.dataset.filename;
-            const fileExtension = fileName.split('.').pop().toLowerCase();
-            const modal = document.getElementById('preview-modal');
-            const previewContent = document.getElementById('preview-content');
-
-            if (['jpeg', 'jpg', 'gif', 'png', 'webp'].includes(fileExtension)) {
-                previewContent.innerHTML = `<img src="/download/${fileName}" alt="${fileName}" class="preview-image">`;
-            } else if (['mp4', 'webm', 'ogg', 'mov'].includes(fileExtension)) {
-                previewContent.innerHTML = `<video src="/download/${fileName}" controls class="preview-video"></video>`;
-            } else if (['mp3', 'wav', 'ogg'].includes(fileExtension)) {
-                previewContent.innerHTML = `<audio src="/download/${fileName}" controls class="preview-audio"></audio>`;
-            } else {
-                previewContent.innerHTML = `<iframe src="/download/${fileName}" class="preview-iframe"></iframe>`;
-            }
-
-            modal.style.display = 'block';
-        });
-    });
+  item.addEventListener('click', function(e) {
+    if (e.target.closest('.file-actions') || e.target.classList.contains('file-rename-input')) return;
+    
+    const fileName = this.dataset.filename;
+    const fileExtension = fileName.split('.').pop().toLowerCase();
+    
+    // Проверяем, является ли файл текстовым или без расширения
+    if (fileExtension === 'txt' || fileName.indexOf('.') === -1) {
+      openTextEditor(fileName);
+    } else {
+      // Существующий код для предпросмотра других типов файлов
+      const modal = document.getElementById('preview-modal');
+      const previewContent = document.getElementById('preview-content');
+      
+      if (['jpeg', 'jpg', 'gif', 'png', 'webp'].includes(fileExtension)) {
+        previewContent.innerHTML = `<img src="/download/${fileName}" alt="${fileName}" class="preview-image">`;
+      } else if (['mp4', 'webm', 'ogg', 'mov'].includes(fileExtension)) {
+        previewContent.innerHTML = `<video src="/download/${fileName}" controls class="preview-video"></video>`;
+      } else if (['mp3', 'wav', 'ogg'].includes(fileExtension)) {
+        previewContent.innerHTML = `<audio src="/download/${fileName}" controls class="preview-audio"></audio>`;
+      } else {
+        previewContent.innerHTML = `<div class="preview-text">Предпросмотр недоступен для этого типа файла</div>`;
+      }
+      
+      modal.style.display = 'block';
+    }
+  });
+});
 
     // Закрытие модального окна
     document.querySelector('.close').addEventListener('click', closeModal);
@@ -223,6 +246,169 @@ document.addEventListener('DOMContentLoaded', (event) => {
         document.body.classList.add('light-theme');
     }
 });
+
+// Функция для переименования файла
+document.querySelectorAll('.rename-btn').forEach(btn => {
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    const fileItem = this.closest('.file-item');
+    const nameSpan = fileItem.querySelector('.file-name');
+    const inputField = fileItem.querySelector('.file-rename-input');
+    
+    nameSpan.style.display = 'none';
+    inputField.style.display = 'inline-block';
+    inputField.value = nameSpan.textContent;
+    inputField.focus();
+  });
+});
+
+document.querySelectorAll('.file-rename-input').forEach(input => {
+  input.addEventListener('blur', function() {
+    renameFile(this);
+  });
+
+  input.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      this.blur();
+    }
+  });
+});
+
+function renameFile(inputElement) {
+  const oldName = inputElement.closest('.file-item').dataset.filename;
+  const newName = inputElement.value.trim();
+  
+  if (oldName !== newName && newName !== '') {
+    axios.post('/rename', { oldName, newName })
+      .then(response => {
+        if (response.data.success) {
+          window.location.reload();
+        } else {
+          alert('Ошибка при переименовании файла: ' + (response.data.error || 'Неизвестная ошибка'));
+          resetRenameInput(inputElement);
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('Произошла ошибка при переименовании файла: ' + (error.response?.data?.error || error.message));
+        resetRenameInput(inputElement);
+      });
+  } else {
+    resetRenameInput(inputElement);
+  }
+}
+
+function resetRenameInput(inputElement) {
+  const fileItem = inputElement.closest('.file-item');
+  const nameSpan = fileItem.querySelector('.file-name');
+  inputElement.style.display = 'none';
+  nameSpan.style.display = 'inline-block';
+}
+
+// Обработчики событий для переименования
+document.querySelectorAll('.rename-btn').forEach(btn => {
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    const fileItem = this.closest('.file-item');
+    const nameSpan = fileItem.querySelector('.file-name');
+    const inputField = fileItem.querySelector('.file-rename-input');
+    
+    nameSpan.style.display = 'none';
+    inputField.style.display = 'inline-block';
+    inputField.focus();
+  });
+});
+
+document.querySelectorAll('.file-rename-input').forEach(input => {
+  input.addEventListener('blur', function() {
+    const oldName = this.value;
+    const newName = this.value;
+    if (oldName !== newName) {
+      renameFile(oldName, newName);
+    } else {
+      this.style.display = 'none';
+      this.previousElementSibling.style.display = 'inline-block';
+    }
+  });
+
+  input.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      this.blur();
+    }
+  });
+});
+
+// Функции для работы с текстовыми файлами
+const textEditorModal = document.getElementById('text-editor-modal');
+const textEditorTitle = document.getElementById('text-editor-title');
+const textFileName = document.getElementById('text-file-name');
+const textFileContent = document.getElementById('text-file-content');
+const saveTextFileBtn = document.getElementById('save-text-file-btn');
+const closeTextEditorBtn = document.getElementById('close-text-editor-btn');
+
+function openTextEditor(fileName) {
+  textEditorTitle.textContent = fileName ? 'Редактировать файл' : 'Создать текстовый файл';
+  textFileName.value = fileName;
+  textFileName.disabled = !!fileName;
+  
+  if (fileName) {
+    axios.get(`/get-text-file/${encodeURIComponent(fileName)}`)
+      .then(response => {
+        if (response.data.success) {
+          textFileContent.value = response.data.content;
+        } else {
+          alert('Ошибка при чтении файла');
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('Произошла ошибка при чтении файла');
+      });
+  } else {
+    textFileContent.value = '';
+  }
+  
+  textEditorModal.style.display = 'block';
+}
+
+function closeTextEditor() {
+  textEditorModal.style.display = 'none';
+}
+
+function saveTextFile() {
+  const fileName = textFileName.value.trim();
+  const content = textFileContent.value;
+  
+  if (!fileName) {
+    alert('Please enter a file name');
+    return;
+  }
+  
+  const endpoint = '/create-text-file';
+  
+  axios.post(endpoint, { fileName, content }, {
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+    .then(response => {
+      if (response.data.success) {
+        closeTextEditor();
+        window.location.reload();
+      } else {
+        alert('Error saving file: ' + (response.data.error || 'Unknown error'));
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert('An error occurred while saving the file: ' + (error.response?.data?.error || error.message));
+    });
+}
+
+document.getElementById('create-text-file-btn').addEventListener('click', () => openTextEditor());
+closeTextEditorBtn.addEventListener('click', closeTextEditor);
+saveTextFileBtn.addEventListener('click', saveTextFile);
 
 // Добавьте обработчик события для кнопки переключения темы
 document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);

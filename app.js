@@ -19,6 +19,7 @@ app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.static('public'));
+app.use(express.json());
 
 // Секретный ключ для JWT
 const JWT_SECRET = crypto.randomBytes(64).toString('hex');
@@ -78,11 +79,11 @@ const getDataDir = () => {
   };
 
   const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
+    destination: function (req, file, cb) {
       const dir = getDataDir();
       cb(null, dir);
     },
-    filename: (req, file, cb) => {
+    filename: function (req, file, cb) {
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
       cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
     }
@@ -110,42 +111,29 @@ const getDataDir = () => {
   });
   
   app.post('/upload', authenticateJWT, (req, res) => {
-    let uploadedFile;
-  
     upload.single('file')(req, res, async function (err) {
-      if (err instanceof multer.MulterError) {
-        console.error('Multer error:', err);
-        return res.status(500).send('Ошибка при загрузке файла: ' + err.message);
-      } else if (err) {
-        console.error('Unknown error:', err);
-        return res.status(500).send('Произошла неизвестная ошибка при загрузке файла');
+      if (err) {
+        console.error('Upload error:', err);
+        return res.status(500).json({ error: 'Error uploading file: ' + err.message });
       }
   
       if (!req.file) {
-        return res.status(400).send('Файл не был загружен.');
+        return res.status(400).json({ error: 'No file uploaded.' });
       }
   
-      uploadedFile = req.file;
-  
-      // Генерация thumbnail для видео
-      if (req.file.mimetype.startsWith('video/')) {
-        try {
-          const tg = new ThumbnailGenerator({
-            sourcePath: req.file.path,
-            thumbnailPath: path.join(getDataDir(), 'thumbnails')
-          });
-  
-          const thumbnail = await tg.generateThumbnail({ percentage: 10 });
-          console.log('Thumbnail generated:', thumbnail);
-        } catch (error) {
-          console.error('Error generating thumbnail:', error);
-        }
+      try {
+        const originalName = req.file.originalname;
+        const newPath = path.join(getDataDir(), originalName);
+        
+        await fs.promises.rename(req.file.path, newPath);
+        console.log('File renamed to:', originalName);
+        
+        res.redirect('/dashboard');
+      } catch (error) {
+        console.error('Error renaming file:', error);
+        res.status(500).json({ error: 'Error renaming file: ' + error.message });
       }
-  
-      console.log('File uploaded successfully:', req.file);
-      res.redirect('/dashboard');
     });
-  
     // Обработка прерванной загрузки
     req.on('aborted', () => {
       if (uploadedFile) {
@@ -156,6 +144,129 @@ const getDataDir = () => {
       }
     });
   });
+
+
+  function saveTextFile() {
+    const fileName = textFileName.value.trim();
+    const content = textFileContent.value;
+    
+    if (!fileName) {
+      alert('Пожалуйста, введите имя файла');
+      return;
+    }
+    
+    const endpoint = '/update-text-file';
+    
+    axios.post(endpoint, { fileName, content })
+      .then(response => {
+        if (response.data.success) {
+          closeTextEditor();
+          window.location.reload();
+        } else {
+          alert('Ошибка при сохранении файла: ' + (response.data.error || 'Неизвестная ошибка'));
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('Произошла ошибка при сохранении файла: ' + (error.response?.data?.error || error.message));
+      });
+  }
+    
+  
+
+
+  // Переименование файла
+  app.post('/rename', authenticateJWT, async (req, res) => {
+    const { oldName, newName } = req.body;
+    
+    if (!oldName || !newName || typeof oldName !== 'string' || typeof newName !== 'string') {
+      return res.status(400).json({ success: false, error: 'Invalid file names' });
+    }
+  
+    const dataDir = getDataDir();
+    if (!dataDir) {
+      return res.status(500).json({ success: false, error: 'Could not determine data directory' });
+    }
+  
+    const oldPath = path.join(dataDir, oldName);
+    const newPath = path.join(dataDir, newName);
+  
+    try {
+      await fs.promises.rename(oldPath, newPath);
+      console.log('File renamed from', oldName, 'to', newName);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Error renaming file:', err);
+      res.status(500).json({ success: false, error: 'Error renaming file: ' + err.message });
+    }
+  });
+
+// Создание текстового файла
+app.post('/create-text-file', authenticateJWT, async (req, res) => {
+  console.log('Received request to create text file:', req.body);
+  
+  const { fileName, content } = req.body;
+  
+  if (!fileName || typeof fileName !== 'string') {
+    return res.status(400).json({ success: false, error: 'Invalid file name' });
+  }
+
+  const dataDir = getDataDir();
+  if (!dataDir) {
+    return res.status(500).json({ success: false, error: 'Could not determine data directory' });
+  }
+
+  const filePath = path.join(dataDir, fileName);
+
+  try {
+    await fs.promises.writeFile(filePath, content || '');
+    console.log('Text file created:', filePath);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error creating text file:', err);
+    res.status(500).json({ success: false, error: 'Error creating file: ' + err.message });
+  }
+});
+
+// Обновление содержимого текстового файла
+app.post('/update-text-file', authenticateJWT, async (req, res) => {
+  const { fileName, content } = req.body;
+  
+  if (!fileName || typeof fileName !== 'string') {
+    return res.status(400).json({ success: false, error: 'Invalid file name' });
+  }
+
+  const dataDir = getDataDir();
+  if (!dataDir) {
+    return res.status(500).json({ success: false, error: 'Could not determine data directory' });
+  }
+
+  const filePath = path.join(dataDir, fileName);
+
+  try {
+    await fs.promises.writeFile(filePath, content || '');
+    console.log('Text file updated:', filePath);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error updating text file:', err);
+    res.status(500).json({ success: false, error: 'Error updating file: ' + err.message });
+  }
+});
+
+// Получение содержимого текстового файла
+app.get('/get-text-file/:fileName', authenticateJWT, async (req, res) => {
+  const fileName = req.params.fileName;
+  const filePath = path.join(getDataDir(), fileName);
+
+  try {
+    const content = await fs.promises.readFile(filePath, 'utf-8');
+    res.json({ success: true, content });
+  } catch (err) {
+    console.error('Error reading file:', err);
+    res.status(500).json({ success: false, error: 'Error reading file' });
+  }
+});
+
 
 app.get('/', (req, res) => {
   res.render('login');
