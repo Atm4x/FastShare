@@ -587,15 +587,19 @@ async function loadExcel(url) {
 // Обновите обработчик клика по элементу файла
 document.querySelectorAll('.file-item').forEach(item => {
     item.addEventListener('click', async function(e) {
-        if (e.target.closest('.file-actions') || e.target.classList.contains('file-rename-input')) return;
-        
-        const fileName = this.dataset.filename;
-        const fileExtension = fileName.split('.').pop().toLowerCase();
-        
+      if (e.target.closest('.file-actions') || e.target.classList.contains('file-rename-input')) return;
+      
+      const fileName = this.dataset.filename;
+      const fileExtension = fileName.split('.').pop().toLowerCase();
+      
+      if (fileExtension === 'txt' || fileName.indexOf('.') === -1) {
+        openTextEditor(fileName);
+      } else {
+
         const modal = document.getElementById('preview-modal');
         const previewContent = document.getElementById('preview-content');
-        
-        
+
+
         const imageFormats = ['jpeg', 'jpg', 'gif', 'png', 'webp', 'bmp', 'tiff', 'svg'];
         const videoFormats = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'flv', 'mkv'];
         const audioFormats = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'];
@@ -604,7 +608,7 @@ document.querySelectorAll('.file-item').forEach(item => {
         if (modelFormats.includes(fileExtension)) {
             previewContent.innerHTML = '';
             initThreeJS();
-            
+
             isOpened = true;
             animate();
             loadModel(`/download/${fileName}`, fileExtension);
@@ -623,8 +627,9 @@ document.querySelectorAll('.file-item').forEach(item => {
         } else {
             previewContent.innerHTML = `<div class="preview-text">Предпросмотр недоступен для этого типа файла</div>`;
         }
-        
+
         modal.style.display = 'block';
+      }
     });
 });
 
