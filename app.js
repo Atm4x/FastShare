@@ -112,40 +112,45 @@ const getDataDir = () => {
     fileFilter: multerFilter
   });
   
-  app.post('/upload', authenticateJWT, (req, res) => {
-    upload.single('file')(req, res, async function (err) {
-      if (err) {
-        console.error('Upload error:', err);
-        return res.status(500).json({ error: 'Error uploading file: ' + err.message });
-      }
-  
-      if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded.' });
-      }
-  
-      try {
-        const originalName = req.file.originalname;
-        const newPath = path.join(getDataDir(), originalName);
-        
-        await fs.promises.rename(req.file.path, newPath);
-        console.log('File renamed to:', originalName);
-        
-        res.redirect('/dashboard');
-      } catch (error) {
-        console.error('Error renaming file:', error);
-        res.status(500).json({ error: 'Error renaming file: ' + error.message });
-      }
-    });
-    // Обработка прерванной загрузки
-    req.on('aborted', () => {
-      if (uploadedFile) {
-        fs.unlink(uploadedFile.path, (err) => {
-          if (err) console.error('Error deleting incomplete file:', err);
-          else console.log('Incomplete file deleted:', uploadedFile.path);
-        });
-      }
-    });
+app.post('/upload', authenticateJWT, (req, res) => {
+  let uploadedFile = null;
+
+  upload.single('file')(req, res, async function (err) {
+    if (err) {
+      console.error('Upload error:', err);
+      return res.status(500).json({ error: 'Error uploading file: ' + err.message });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded.' });
+    }
+
+    uploadedFile = req.file;
+
+    try {
+      const originalName = req.file.originalname;
+      const newPath = path.join(getDataDir(), originalName);
+      
+      await fs.promises.rename(req.file.path, newPath);
+      console.log('File renamed to:', originalName);
+      
+      res.redirect('/dashboard');
+    } catch (error) {
+      console.error('Error renaming file:', error);
+      res.status(500).json({ error: 'Error renaming file: ' + error.message });
+    }
   });
+
+  // Обработка прерванной загрузки
+  req.on('aborted', () => {
+    if (uploadedFile && uploadedFile.path) {
+      fs.unlink(uploadedFile.path, (err) => {
+        if (err) console.error('Error deleting incomplete file:', err);
+        else console.log('Incomplete file deleted:', uploadedFile.path);
+      });
+    }
+  });
+});
 
 
   function saveTextFile() {
