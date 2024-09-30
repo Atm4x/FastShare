@@ -32,6 +32,10 @@
         
         <section class="upload-section">
             <h2><i class="fas fa-cloud-upload-alt"></i> Загрузить файл</h2>
+            <div id="drop-area">
+              <p>Перетащите файлы сюда или нажмите для выбора</p>
+              <i class="fas fa-cloud-upload-alt"></i>
+            </div>
             <form action="/upload" method="POST" enctype="multipart/form-data" id="upload-form">
                 <input type="file" name="file" id="file" required>
                 <label for="file" class="file-label"><i class="fas fa-file-upload"></i> Выберите файл</label>
@@ -126,9 +130,11 @@
     </div>
 
     <div id="preview-modal" class="modal">
-        <span class="close">&times;</span>
-        <div id="preview-content"></div>
-    </div>
+      <span class="close">&times;</span>
+      <div id="preview-container">
+          <div id="preview-content"></div>
+      </div>
+  </div>
 
 <script>
     document.getElementById('file').addEventListener('change', function(e) {
@@ -552,15 +558,29 @@ async function loadPDF(url) {
     await page.render(renderContext);
 
     const previewContent = document.getElementById('preview-content');
-    previewContent.appendChild(canvas);
+    previewContent.innerHTML = '';
+    const pdfContainer = document.createElement('div');
+    pdfContainer.className = 'doc-container';
+    pdfContainer.appendChild(canvas);
+    previewContent.appendChild(pdfContainer);
 }
 
-async function loadDOCX(url) {
+async function loadDocument(url, fileExtension) {
     const response = await fetch(url);
     const arrayBuffer = await response.arrayBuffer();
-    const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
-    
+    let result;
+
+    if (fileExtension === 'docx') {
+        result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
+    } else if (['odt', 'rtf', 'txt'].includes(fileExtension)) {
+        const text = new TextDecoder().decode(arrayBuffer);
+        result = { value: `<pre>${text}</pre>` };
+    } else {
+        throw new Error('Unsupported document format');
+    }
+
     const previewContent = document.getElementById('preview-content');
+    previewContent.innerHTML = '';
     const docContainer = document.createElement('div');
     docContainer.className = 'doc-container';
     docContainer.innerHTML = result.value;
@@ -578,6 +598,7 @@ async function loadExcel(url) {
     const html = XLSX.utils.sheet_to_html(worksheet);
     
     const previewContent = document.getElementById('preview-content');
+    previewContent.innerHTML = '';
     const excelContainer = document.createElement('div');
     excelContainer.className = 'excel-container';
     excelContainer.innerHTML = html;
@@ -587,51 +608,184 @@ async function loadExcel(url) {
 // Обновите обработчик клика по элементу файла
 document.querySelectorAll('.file-item').forEach(item => {
     item.addEventListener('click', async function(e) {
-      if (e.target.closest('.file-actions') || e.target.classList.contains('file-rename-input')) return;
-      
-      const fileName = this.dataset.filename;
-      const fileExtension = fileName.split('.').pop().toLowerCase();
-      
-      if (fileExtension === 'txt' || fileName.indexOf('.') === -1) {
-        openTextEditor(fileName);
-      } else {
-
-        const modal = document.getElementById('preview-modal');
-        const previewContent = document.getElementById('preview-content');
-
-
-        const imageFormats = ['jpeg', 'jpg', 'gif', 'png', 'webp', 'bmp', 'tiff', 'svg'];
-        const videoFormats = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'flv', 'mkv'];
-        const audioFormats = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'];
-        const modelFormats = ['stl', 'obj', 'fbx', 'gltf', 'glb', 'usd', 'usdc', 'usdz', '3ds', 'dae', 'ply', 'x3d'];
-
-        if (modelFormats.includes(fileExtension)) {
-            previewContent.innerHTML = '';
-            initThreeJS();
-
-            isOpened = true;
-            animate();
-            loadModel(`/download/${fileName}`, fileExtension);
-        } else if (imageFormats.includes(fileExtension)) {
-            previewContent.innerHTML = `<img src="/download/${fileName}" alt="${fileName}" class="preview-image">`;
-        } else if (videoFormats.includes(fileExtension)) {
-            previewContent.innerHTML = `<video src="/download/${fileName}" controls class="preview-video"></video>`;
-        } else if (audioFormats.includes(fileExtension)) {
-            previewContent.innerHTML = `<audio src="/download/${fileName}" controls class="preview-audio"></audio>`;
-        } else if (fileExtension === 'pdf') {
-            await loadPDF(`/download/${fileName}`);
-        } else if (fileExtension === 'docx') {
-            await loadDOCX(`/download/${fileName}`);
-        } else if (['xls', 'xlsx'].includes(fileExtension)) {
-            await loadExcel(`/download/${fileName}`);
+        if (e.target.closest('.file-actions') || e.target.classList.contains('file-rename-input')) return;
+        
+        const fileName = this.dataset.filename;
+        const fileExtension = fileName.split('.').pop().toLowerCase();
+        
+        if (fileExtension === 'txt' || fileName.indexOf('.') === -1) {
+            openTextEditor(fileName);
         } else {
-            previewContent.innerHTML = `<div class="preview-text">Предпросмотр недоступен для этого типа файла</div>`;
-        }
+            const modal = document.getElementById('preview-modal');
+            const previewContent = document.getElementById('preview-content');
+            previewContent.innerHTML = ''; // Очищаем содержимое перед загрузкой нового файла
 
-        modal.style.display = 'block';
-      }
+            const imageFormats = ['jpeg', 'jpg', 'gif', 'png', 'webp', 'bmp', 'tiff', 'svg'];
+            const videoFormats = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'flv', 'mkv'];
+            const audioFormats = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'];
+            const modelFormats = ['stl', 'obj', 'fbx', 'gltf', 'glb', 'usd', 'usdc', 'usdz', '3ds', 'dae', 'ply', 'x3d'];
+            const documentFormats = ['docx', 'odt', 'rtf', 'txt'];
+
+            if (modelFormats.includes(fileExtension)) {
+                initThreeJS();
+                isOpened = true;
+                animate();
+                loadModel(`/download/${fileName}`, fileExtension);
+            } else if (imageFormats.includes(fileExtension)) {
+                previewContent.innerHTML = `
+                    <div class="preview-image-container">
+                        <img src="/download/${fileName}" alt="${fileName}" class="preview-image">
+                    </div>
+                `;
+                setupImageZoom();
+            } else if (videoFormats.includes(fileExtension)) {
+                previewContent.innerHTML = `<video src="/download/${fileName}" controls class="preview-video"></video>`;
+            } else if (audioFormats.includes(fileExtension)) {
+                previewContent.innerHTML = `<audio src="/download/${fileName}" controls class="preview-audio"></audio>`;
+            } else if (fileExtension === 'pdf') {
+                await loadPDF(`/download/${fileName}`);
+            } else if (documentFormats.includes(fileExtension)) {
+                await loadDocument(`/download/${fileName}`, fileExtension);
+            } else if (['xls', 'xlsx'].includes(fileExtension)) {
+                await loadExcel(`/download/${fileName}`);
+            } else {
+                previewContent.innerHTML = `<div class="preview-text">Предпросмотр недоступен для этого типа файла</div>`;
+            }
+
+            modal.style.display = 'block';
+        }
     });
 });
+
+function setupImageZoom() {
+    const container = document.querySelector('.preview-image-container');
+    const img = container.querySelector('.preview-image');
+    let scale = 1;
+    let isDragging = false;
+    let startX, startY, translateX = 0, translateY = 0;
+
+    img.addEventListener('load', resetZoom);
+
+    container.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        const newScale = scale * delta;
+        
+        if (newScale >= 0.5 && newScale <= 5) {
+            const scaleChange = newScale / scale;
+            translateX = mouseX - (mouseX - translateX) * scaleChange;
+            translateY = mouseY - (mouseY - translateY) * scaleChange;
+            scale = newScale;
+            updateImageTransform();
+        }
+    });
+
+    container.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startX = e.clientX - translateX;
+        startY = e.clientY - translateY;
+        container.style.cursor = 'grabbing';
+    });
+
+    container.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            translateX = e.clientX - startX;
+            translateY = e.clientY - startY;
+            updateImageTransform();
+        }
+    });
+
+    container.addEventListener('mouseup', () => {
+        isDragging = false;
+        container.style.cursor = 'grab';
+    });
+
+    container.addEventListener('mouseleave', () => {
+        isDragging = false;
+        container.style.cursor = 'grab';
+    });
+
+    function updateImageTransform() {
+        const containerRect = container.getBoundingClientRect();
+        const imgRect = img.getBoundingClientRect();
+
+        const scaledWidth = img.naturalWidth * scale;
+        const scaledHeight = img.naturalHeight * scale;
+
+        const maxTranslateX = Math.max(0, (scaledWidth - containerRect.width) / 2);
+        const maxTranslateY = Math.max(0, (scaledHeight - containerRect.height) / 2);
+
+        translateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, translateX));
+        translateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, translateY));
+
+        img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    }
+
+    function resetZoom() {
+        scale = 1;
+        translateX = 0;
+        translateY = 0;
+        updateImageTransform();
+        container.style.cursor = 'grab';
+    }
+
+    container.addEventListener('dblclick', resetZoom);
+
+    // Поддержка касаний для мобильных устройств
+    let lastTouchDistance = 0;
+
+    container.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+            lastTouchDistance = getTouchDistance(e.touches);
+        } else if (e.touches.length === 1) {
+            isDragging = true;
+            startX = e.touches[0].clientX - translateX;
+            startY = e.touches[0].clientY - translateY;
+        }
+    });
+
+    container.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (e.touches.length === 2) {
+            const currentDistance = getTouchDistance(e.touches);
+            const delta = currentDistance / lastTouchDistance;
+            lastTouchDistance = currentDistance;
+
+            const newScale = scale * delta;
+            if (newScale >= 0.5 && newScale <= 5) {
+                const rect = container.getBoundingClientRect();
+                const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+                const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+
+                const scaleChange = newScale / scale;
+                translateX = centerX - (centerX - translateX) * scaleChange;
+                translateY = centerY - (centerY - translateY) * scaleChange;
+                scale = newScale;
+                updateImageTransform();
+            }
+        } else if (e.touches.length === 1 && isDragging) {
+            translateX = e.touches[0].clientX - startX;
+            translateY = e.touches[0].clientY - startY;
+            updateImageTransform();
+        }
+    });
+
+    container.addEventListener('touchend', () => {
+        isDragging = false;
+        lastTouchDistance = 0;
+    });
+
+    function getTouchDistance(touches) {
+        return Math.hypot(
+            touches[0].clientX - touches[1].clientX,
+            touches[0].clientY - touches[1].clientY
+        );
+    }
+}
 
 // Обновите функцию закрытия модального окна
 function closeModal() {
@@ -640,11 +794,14 @@ function closeModal() {
     modal.style.display = 'none';
     isOpened = false;
     
-    const videoElement = previewContent.querySelector('video');
-    if (videoElement) {
-        videoElement.pause();
-        videoElement.currentTime = 0;
+    // Сброс масштаба изображения
+    const img = previewContent.querySelector('.preview-image');
+    if (img) {
+        img.style.transform = 'translate(0, 0) scale(1)';
     }
+
+    // Очищаем содержимое
+    previewContent.innerHTML = '';
 
     // Очистка Three.js сцены
     if (renderer) {
@@ -658,6 +815,82 @@ function closeModal() {
         camera = null;
         renderer = null;
         object = null;
+    }
+}
+
+// Drag & Drop functionality
+const dropArea = document.getElementById('drop-area');
+const fileInput = document.getElementById('file');
+
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, preventDefaults, false);
+});
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+['dragenter', 'dragover'].forEach(eventName => {
+    dropArea.addEventListener(eventName, highlight, false);
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, unhighlight, false);
+});
+
+function highlight() {
+    dropArea.classList.add('highlight');
+}
+
+function unhighlight() {
+    dropArea.classList.remove('highlight');
+}
+
+dropArea.addEventListener('drop', handleDrop, false);
+
+function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    handleFiles(files);
+}
+
+dropArea.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', function() {
+    handleFiles(this.files);
+});
+
+function handleFiles(files) {
+    const formData = new FormData();
+    formData.append('file', files[0]);
+    
+    axios.post('/upload', formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data'
+        },
+        onUploadProgress: progressEvent => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            updateProgressBar(percentCompleted);
+        }
+    }).then(response => {
+        console.log('Upload successful');
+        window.location.reload();
+    }).catch(error => {
+        console.error('Error:', error);
+        alert('Произошла ошибка при загрузке файла');
+    });
+}
+
+function updateProgressBar(percent) {
+    const progressBar = document.getElementById('progress-bar');
+    const progressBarContainer = document.getElementById('progress-bar-container');
+    progressBarContainer.style.display = 'block';
+    progressBar.style.width = percent + '%';
+    if (percent >= 100) {
+        setTimeout(() => {
+            progressBarContainer.style.display = 'none';
+        }, 1000);
     }
 }
 </script>
