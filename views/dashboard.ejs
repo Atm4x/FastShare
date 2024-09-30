@@ -6,6 +6,19 @@
     <title>Панель управления</title>
     <link rel="stylesheet" href="/dashboard-styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -117,8 +130,6 @@
         <div id="preview-content"></div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
 <script>
     document.getElementById('file').addEventListener('change', function(e) {
         var fileName = e.target.files[0].name;
@@ -175,36 +186,6 @@
         });
     });
 
-    // Обработка клика по файлу
-    document.querySelectorAll('.file-item').forEach(item => {
-  item.addEventListener('click', function(e) {
-    if (e.target.closest('.file-actions') || e.target.classList.contains('file-rename-input')) return;
-    
-    const fileName = this.dataset.filename;
-    const fileExtension = fileName.split('.').pop().toLowerCase();
-    
-    // Проверяем, является ли файл текстовым или без расширения
-    if (fileExtension === 'txt' || fileName.indexOf('.') === -1) {
-      openTextEditor(fileName);
-    } else {
-      // Существующий код для предпросмотра других типов файлов
-      const modal = document.getElementById('preview-modal');
-      const previewContent = document.getElementById('preview-content');
-      
-      if (['jpeg', 'jpg', 'gif', 'png', 'webp'].includes(fileExtension)) {
-        previewContent.innerHTML = `<img src="/download/${fileName}" alt="${fileName}" class="preview-image">`;
-      } else if (['mp4', 'webm', 'ogg', 'mov'].includes(fileExtension)) {
-        previewContent.innerHTML = `<video src="/download/${fileName}" controls class="preview-video"></video>`;
-      } else if (['mp3', 'wav', 'ogg'].includes(fileExtension)) {
-        previewContent.innerHTML = `<audio src="/download/${fileName}" controls class="preview-audio"></audio>`;
-      } else {
-        previewContent.innerHTML = `<div class="preview-text">Предпросмотр недоступен для этого типа файла</div>`;
-      }
-      
-      modal.style.display = 'block';
-    }
-  });
-});
 
     // Закрытие модального окна
     document.querySelector('.close').addEventListener('click', closeModal);
@@ -412,6 +393,268 @@ saveTextFileBtn.addEventListener('click', saveTextFile);
 
 // Добавьте обработчик события для кнопки переключения темы
 document.querySelector('.theme-toggle').addEventListener('click', toggleTheme);
+
+// Добавьте эти функции после существующего кода
+
+
+let scene, camera, renderer, object, controls;
+
+function initThreeJS() {
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth * 0.8, window.innerHeight * 0.8);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.getElementById('preview-content').appendChild(renderer.domElement);
+
+    // Создаем OrbitControls
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.25;
+    controls.enableZoom = true;
+
+    // Устанавливаем начальную позицию камеры
+    camera.position.z = 5;
+
+    // Добавляем обработчик изменения размера окна
+    window.addEventListener('resize', onWindowResize, false);
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth * 0.8, window.innerHeight * 0.8);
+}
+function loadModel(url, fileExtension) {
+    let loader;
+    switch (fileExtension) {
+        case 'stl':
+            loader = new THREE.STLLoader();
+            break;
+        case 'glb':
+        case 'gltf':
+            loader = new THREE.GLTFLoader();
+            break;
+        case 'fbx':
+            loader = new THREE.FBXLoader();
+            break;
+        case 'obj':
+            loader = new THREE.OBJLoader();
+            break;
+        case 'usd':
+        case 'usdc':
+        case 'usdz':
+            loader = new THREE.USDZLoader();
+            break;
+        default:
+            console.error('Unsupported file format');
+            return;
+    }
+
+    loader.load(url, function(loadedObject) {
+        if (object) scene.remove(object);
+        
+        switch (fileExtension) {
+            case 'stl':
+                const material = new THREE.MeshPhongMaterial({ color: 0xAAAAAA, specular: 0x111111, shininess: 200 });
+                object = new THREE.Mesh(loadedObject, material);
+                break;
+            case 'glb':
+            case 'gltf':
+                object = loadedObject.scene;
+                break;
+            case 'fbx':
+            case 'obj':
+            case 'usd':
+            case 'usdc':
+            case 'usdz':
+                object = loadedObject;
+                break;
+        }
+
+        scene.add(object);
+
+        // Центрирование и масштабирование объекта
+        const box = new THREE.Box3().setFromObject(object);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const fov = camera.fov * (Math.PI / 180);
+        let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+
+        camera.position.z = cameraZ * 1.5;
+
+        const minZ = box.min.z;
+        const cameraToFarEdge = minZ < 0 ? -minZ + cameraZ : cameraZ - minZ;
+
+        camera.far = cameraToFarEdge * 3;
+        camera.updateProjectionMatrix();
+
+        object.position.x = -center.x;
+        object.position.y = -center.y;
+        object.position.z = -center.z;
+
+        // Сброс OrbitControls
+        controls.target.set(0, 0, 0);
+        controls.update();
+
+        // Добавляем освещение, если его еще нет
+        if (!scene.getObjectByName('ambient_light')) {
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            ambientLight.name = 'ambient_light';
+            scene.add(ambientLight);
+        }
+        if (!scene.getObjectByName('directional_light')) {
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            directionalLight.position.set(1, 1, 1).normalize();
+            directionalLight.name = 'directional_light';
+            scene.add(directionalLight);
+        }
+
+    }, 
+    // Функция прогресса загрузки
+    function(xhr) {
+        console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+    },
+    // Функция обработки ошибок
+    function(error) {
+        console.error('An error occurred while loading the model:', error);
+    });
+}
+
+let isOpened = false;
+
+function animate() {
+    if(!isOpened) return;
+
+    requestAnimationFrame(animate);
+    controls.update(); // Обновляем OrbitControls
+    renderer.render(scene, camera);
+}
+
+async function loadPDF(url) {
+    const loadingTask = pdfjsLib.getDocument(url);
+    const pdf = await loadingTask.promise;
+    const page = await pdf.getPage(1);
+    const scale = 1.5;
+    const viewport = page.getViewport({ scale });
+
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+
+    const renderContext = {
+        canvasContext: context,
+        viewport: viewport
+    };
+    await page.render(renderContext);
+
+    const previewContent = document.getElementById('preview-content');
+    previewContent.appendChild(canvas);
+}
+
+async function loadDOCX(url) {
+    const response = await fetch(url);
+    const arrayBuffer = await response.arrayBuffer();
+    const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
+    
+    const previewContent = document.getElementById('preview-content');
+    const docContainer = document.createElement('div');
+    docContainer.className = 'doc-container';
+    docContainer.innerHTML = result.value;
+    previewContent.appendChild(docContainer);
+}
+
+async function loadExcel(url) {
+    const response = await fetch(url);
+    const arrayBuffer = await response.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+    
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    
+    const html = XLSX.utils.sheet_to_html(worksheet);
+    
+    const previewContent = document.getElementById('preview-content');
+    const excelContainer = document.createElement('div');
+    excelContainer.className = 'excel-container';
+    excelContainer.innerHTML = html;
+    previewContent.appendChild(excelContainer);
+}
+
+// Обновите обработчик клика по элементу файла
+document.querySelectorAll('.file-item').forEach(item => {
+    item.addEventListener('click', async function(e) {
+        if (e.target.closest('.file-actions') || e.target.classList.contains('file-rename-input')) return;
+        
+        const fileName = this.dataset.filename;
+        const fileExtension = fileName.split('.').pop().toLowerCase();
+        
+        const modal = document.getElementById('preview-modal');
+        const previewContent = document.getElementById('preview-content');
+        
+        
+        const imageFormats = ['jpeg', 'jpg', 'gif', 'png', 'webp', 'bmp', 'tiff', 'svg'];
+        const videoFormats = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'flv', 'mkv'];
+        const audioFormats = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'];
+        const modelFormats = ['stl', 'obj', 'fbx', 'gltf', 'glb', 'usd', 'usdc', 'usdz', '3ds', 'dae', 'ply', 'x3d'];
+
+        if (modelFormats.includes(fileExtension)) {
+            previewContent.innerHTML = '';
+            initThreeJS();
+            
+            isOpened = true;
+            animate();
+            loadModel(`/download/${fileName}`, fileExtension);
+        } else if (imageFormats.includes(fileExtension)) {
+            previewContent.innerHTML = `<img src="/download/${fileName}" alt="${fileName}" class="preview-image">`;
+        } else if (videoFormats.includes(fileExtension)) {
+            previewContent.innerHTML = `<video src="/download/${fileName}" controls class="preview-video"></video>`;
+        } else if (audioFormats.includes(fileExtension)) {
+            previewContent.innerHTML = `<audio src="/download/${fileName}" controls class="preview-audio"></audio>`;
+        } else if (fileExtension === 'pdf') {
+            await loadPDF(`/download/${fileName}`);
+        } else if (fileExtension === 'docx') {
+            await loadDOCX(`/download/${fileName}`);
+        } else if (['xls', 'xlsx'].includes(fileExtension)) {
+            await loadExcel(`/download/${fileName}`);
+        } else {
+            previewContent.innerHTML = `<div class="preview-text">Предпросмотр недоступен для этого типа файла</div>`;
+        }
+        
+        modal.style.display = 'block';
+    });
+});
+
+// Обновите функцию закрытия модального окна
+function closeModal() {
+    const modal = document.getElementById('preview-modal');
+    const previewContent = document.getElementById('preview-content');
+    modal.style.display = 'none';
+    isOpened = false;
+    
+    const videoElement = previewContent.querySelector('video');
+    if (videoElement) {
+        videoElement.pause();
+        videoElement.currentTime = 0;
+    }
+
+    // Очистка Three.js сцены
+    if (renderer) {
+        renderer.dispose();
+        if (object) {
+            scene.remove(object);
+            if (object.geometry) object.geometry.dispose();
+            if (object.material) object.material.dispose();
+        }
+        scene = null;
+        camera = null;
+        renderer = null;
+        object = null;
+    }
+}
 </script>
 </body>
 </html>
