@@ -11,6 +11,11 @@ const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 const config = require('./config');
 
+const QRCode = require('qrcode');
+const { v4: uuidv4 } = require('uuid');
+
+const qrCodes = new Map();
+
 const ThumbnailGenerator = require('video-thumbnail-generator').default;
 
 const app = express();
@@ -33,6 +38,7 @@ const user = {
   password: config.PASSWORD_HASH,
   role: 'admin'
 };
+
 
 // Middleware для проверки JWT
 const authenticateJWT = (req, res, next) => {
@@ -280,20 +286,24 @@ app.get('/', (req, res) => {
 });
 
 app.post('/login', async (req, res) => {
-    const { username, password } = req.body;
-  
-    if (username === user.username && await bcrypt.compare(password, user.password)) {
-      const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
-      res.cookie('token', token, { 
-        httpOnly: true, 
-        secure: process.env.NODE_ENV === 'production' ? false : true,
-        sameSite: 'strict'
+  const { username, password, remember } = req.body;
+  const redirect = req.query.redirect || '/dashboard';
+
+  if (username === user.username && await bcrypt.compare(password, user.password)) {
+      const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { 
+          expiresIn: remember ? '30d' : '1h' 
       });
-      res.redirect('/dashboard');
-    } else {
+      res.cookie('token', token, { 
+          httpOnly: true, 
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: remember ? 30 * 24 * 60 * 60 * 1000 : undefined
+      });
+      res.redirect(redirect);
+  } else {
       res.render('login', { error: 'Неверное имя пользователя или пароль.' });
-    }
-  });
+  }
+});
 
 app.get('/dashboard', authenticateJWT, async (req, res) => {
     const dir = getDataDir();
@@ -344,4 +354,68 @@ app.use((err, req, res, next) => {
 
 app.listen(port, () => {
   console.log(`Сервер запущен на http://localhost:${port}`);
+});
+
+
+
+
+function cleanupQRCodes() {
+  const now = Date.now();
+  for (const [key, value] of qrCodes.entries()) {
+      if (now - value.createdAt > 5 * 60 * 1000) {
+          qrCodes.delete(key);
+      }
+  }
+}
+
+setInterval(cleanupQRCodes, 5 * 60 * 1000);
+
+app.get('/qr-login', (req, res) => {
+  const qrId = uuidv4();
+  const qrData = {
+      id: qrId,
+      createdAt: Date.now()
+  };
+  qrCodes.set(qrId, qrData);
+
+  QRCode.toDataURL(`${req.protocol}://${req.get('host')}/confirm/${qrId}`, (err, url) => {
+      if (err) {
+          console.error('Error generating QR code:', err);
+          return res.status(500).send('Error generating QR code');
+      }
+      res.render('qr-login', { qrCodeUrl: url });
+  });
+});
+
+app.get('/confirm/:qrId', authenticateJWT, (req, res) => {
+  const qrId = req.params.qrId;
+  const qrData = qrCodes.get(qrId);
+
+  if (!qrData) {
+      return res.status(400).send('Invalid or expired QR code');
+  }
+
+  // Создаем новый токен для входа по QR-коду
+  const token = jwt.sign({ id: req.user.id, username: req.user.username, role: req.user.role }, JWT_SECRET, { expiresIn: '1h' });
+
+  // Удаляем использованный QR-код
+  qrCodes.delete(qrId);
+
+  res.json({ success: true, token });
+});
+
+app.get('/check-qr/:qrId', (req, res) => {
+  const qrId = req.params.qrId;
+  const qrData = qrCodes.get(qrId);
+
+  if (!qrData) {
+      return res.json({ status: 'expired' });
+  }
+
+  if (qrData.token) {
+      qrCodes.delete(qrId);
+      return res.json({ status: 'confirmed', token: qrData.token });
+  }
+
+  res.json({ status: 'pending' });
 });

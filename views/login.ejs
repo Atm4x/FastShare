@@ -14,7 +14,7 @@
             <% if (locals.error) { %>
                 <p class="error"><%= error %></p>
             <% } %>
-            <form action="/login" method="POST">
+            <form action="/login?redirect=<%= locals.redirect || '/dashboard' %>" method="POST">
                 <div class="input-group">
                     <i class="fas fa-user"></i>
                     <input type="text" name="username" placeholder="Имя пользователя" required>
@@ -22,6 +22,10 @@
                 <div class="input-group">
                     <i class="fas fa-lock"></i>
                     <input type="password" name="password" placeholder="Пароль" required>
+                </div>
+                <div class="input-group">
+                    <input type="checkbox" id="remember" name="remember">
+                    <label for="remember">Запомнить на этом устройстве</label>
                 </div>
                 <button type="submit">Войти</button>
             </form>
