@@ -402,7 +402,7 @@ app.get('/qr-login', (req, res) => {
   });
 });
 
-app.get('/auto-login/:sessionId', authenticateJWT, (req, res) => {
+app.get('/auto-login/:sessionId', (req, res) => {
   const { sessionId } = req.params;
   const session = QRSessions[sessionId];
 
@@ -410,23 +410,37 @@ app.get('/auto-login/:sessionId', authenticateJWT, (req, res) => {
     return res.status(404).send('Сессия не найдена или истекла');
   }
 
-  // Используем токен аутентифицированного пользователя
   const token = req.cookies.token;
-  
-  session.status = 'confirmed';
-  session.token = token;
+  console.log('Token from cookie:', token);
 
-  // Отправляем HTML с JavaScript для закрытия окна
-  res.send(`
-    <html>
-      <body>
-        <script>
-          window.close();
-        </script>
-        <p>Вход выполнен успешно. Это окно можно закрыть.</p>
-      </body>
-    </html>
-  `);
+  if (token) {
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+      if (err) {
+        console.log('JWT verification failed:', err);
+        return res.render('login', { error: 'Требуется повторная аутентификация', redirect: `/auto-login/${sessionId}` });
+      }
+      
+      console.log('User authenticated:', user);
+      
+      session.status = 'confirmed';
+      session.token = token;
+
+      // Отправляем HTML с JavaScript для закрытия окна
+      res.send(`
+        <html>
+          <body>
+            <script>
+              window.close();
+            </script>
+            <p>Вход выполнен успешно. Это окно можно закрыть.</p>
+          </body>
+        </html>
+      `);
+    });
+  } else {
+    console.log('No token found, redirecting to login');
+    res.render('login', { error: 'Пожалуйста, войдите в систему', redirect: `/auto-login/${sessionId}` });
+  }
 });
 
 app.get('/check-qr/:sessionId', (req, res) => {
