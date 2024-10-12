@@ -382,21 +382,38 @@ app.get('/qr-login', (req, res) => {
   });
 });
 
-app.get('/check-qr/:sessionId', (req, res) => {
+app.get('/auto-login/:sessionId', (req, res) => {
   const { sessionId } = req.params;
   const session = QRSessions[sessionId];
 
   if (!session) {
-    return res.json({ status: 'expired' });
+    return res.status(404).send('Сессия не найдена или истекла');
   }
 
-  if (session.status === 'confirmed') {
-    const token = session.token;
-    delete QRSessions[sessionId]; // Удаляем сессию после успешного входа
-    return res.json({ status: 'confirmed', token });
-  }
+  // Генерируем токен
+  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
+  
+  session.status = 'confirmed';
+  session.token = token;
 
-  res.json({ status: 'pending' });
+  // Устанавливаем куки с токеном
+  res.cookie('token', token, { 
+    httpOnly: true, 
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict'
+  });
+
+  // Отправляем HTML с JavaScript для закрытия окна
+  res.send(`
+    <html>
+      <body>
+        <script>
+          window.close();
+        </script>
+        <p>Вход выполнен успешно. Это окно можно закрыть.</p>
+      </body>
+    </html>
+  `);
 });
 
 app.get('/check-qr/:sessionId', (req, res) => {
