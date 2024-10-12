@@ -11,13 +11,13 @@ const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 const config = require('./config');
 
-const qr = require('qrcode');
+const QRCode = require('qrcode');
 const { v4: uuidv4 } = require('uuid');
 
 const ThumbnailGenerator = require('video-thumbnail-generator').default;
 
 const app = express();
-const port = process.env.PORT || 8080;
+const port = process.env.PORT || 23002;
 
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -361,19 +361,20 @@ const qrCodes = {};
 function cleanupQRCodes() {
   const now = Date.now();
   Object.keys(qrCodes).forEach(key => {
-    if (now - qrCodes[key].createdAt > 15 * 60 * 1000) {
+    if (now - qrCodes[key].createdAt > 30 * 60 * 1000) { // увеличиваем до 30 минут
       delete qrCodes[key];
     }
   });
 }
 
-setInterval(cleanupQRCodes, 15 * 60 * 1000);
+setInterval(cleanupQRCodes, 30 * 60 * 1000); // проверяем каждые 30 минут
 
 app.get('/qr-login', (req, res) => {
   const qrId = uuidv4();
   const qrData = {
     id: qrId,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    status: 'pending'
   };
   qrCodes[qrId] = qrData;
 
@@ -382,30 +383,19 @@ app.get('/qr-login', (req, res) => {
       console.error('Error generating QR code:', err);
       return res.status(500).send('Error generating QR code');
     }
-    res.render('qr-login', { qrCodeUrl: url });
+    res.render('qr-login', { qrCodeUrl: url, qrId: qrId });
   });
 });
 
 app.get('/check-qr/:qrId', (req, res) => {
   const qrId = req.params.qrId;
-  
-  const checkQR = () => {
-    const qrData = qrCodes[qrId];
+  const qrData = qrCodes[qrId];
 
-    if (!qrData) {
-      return res.json({ status: 'expired' });
-    }
+  if (!qrData) {
+    return res.json({ status: 'expired' });
+  }
 
-    if (qrData.token) {
-      delete qrCodes[qrId];
-      return res.json({ status: 'confirmed', token: qrData.token });
-    }
-
-    // Если статус все еще 'pending', ждем 2 секунды и проверяем снова
-    setTimeout(checkQR, 2000);
-  };
-
-  checkQR();
+  res.json({ status: qrData.status, token: qrData.token });
 });
 
 app.get('/confirm/:qrId', authenticateJWT, (req, res) => {
@@ -416,13 +406,10 @@ app.get('/confirm/:qrId', authenticateJWT, (req, res) => {
     return res.status(400).send('Invalid or expired QR code');
   }
 
-  // Создаем новый токен для входа по QR-коду
   const token = jwt.sign({ id: req.user.id, username: req.user.username, role: req.user.role }, JWT_SECRET, { expiresIn: '1h' });
 
-  // Сохраняем токен в данных QR-кода
+  qrData.status = 'confirmed';
   qrData.token = token;
 
-  // Используем параметр redirect, если он есть, иначе переходим на dashboard
-  const redirectUrl = req.query.redirect || '/dashboard';
-  res.redirect(redirectUrl);
+  res.send('QR code confirmed. You can close this page and return to the original device.');
 });
