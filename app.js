@@ -11,13 +11,13 @@ const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 const config = require('./config');
 
-const qr = require('qrcode');
+const QRCode = require('qrcode');
 const { v4: uuidv4 } = require('uuid');
 
 const ThumbnailGenerator = require('video-thumbnail-generator').default;
 
 const app = express();
-const port = process.env.PORT || 8080;
+const port = process.env.PORT || 23002;
 
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -59,16 +59,22 @@ const authenticateJWT = (req, res, next) => {
     }
   };
 
-// Middleware для проверки роли
-const checkRole = (role) => {
-  return (req, res, next) => {
-    if (req.user && req.user.role === role) {
-      next();
+  const authenticateJWTMobile = (req, res, next) => {
+    const token = req.cookies.token;
+  
+    if (token) {
+      jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) {
+          return res.status(403).send('Требуется аутентификация');
+        }
+        req.user = user;
+        next();
+      });
     } else {
-      res.status(403).send('Доступ запрещен');
+      res.status(401).send('Требуется аутентификация');
     }
   };
-};
+
 
 const getDataDir = () => {
     let dir;
@@ -356,73 +362,108 @@ app.listen(port, () => {
 
 
 
-const qrCodes = {};
+const QRSessions = {};
 
-function cleanupQRCodes() {
+function generateQRSession() {
+  const sessionId = crypto.randomBytes(16).toString('hex');
+  QRSessions[sessionId] = {
+    createdAt: Date.now(),
+    status: 'pending',
+    token: null
+  };
+  return sessionId;
+}
+
+function cleanupQRSessions() {
   const now = Date.now();
-  Object.keys(qrCodes).forEach(key => {
-    if (now - qrCodes[key].createdAt > 15 * 60 * 1000) {
-      delete qrCodes[key];
+  Object.keys(QRSessions).forEach(key => {
+    if (now - QRSessions[key].createdAt > 10 * 60 * 1000) { // 10 минут
+      delete QRSessions[key];
     }
   });
 }
 
-setInterval(cleanupQRCodes, 15 * 60 * 1000);
+setInterval(cleanupQRSessions, 5 * 60 * 1000); // Очистка каждые 5 минут
 
 app.get('/qr-login', (req, res) => {
-  const qrId = uuidv4();
-  const qrData = {
-    id: qrId,
-    createdAt: Date.now()
-  };
-  qrCodes[qrId] = qrData;
-
-  QRCode.toDataURL(`${req.protocol}://${req.get('host')}/confirm/${qrId}`, (err, url) => {
+  const sessionId = generateQRSession();
+  const loginUrl = `${process.env.BASE_URL}/auto-login/${sessionId}`;
+  
+  QRCode.toDataURL(loginUrl, (err, url) => {
     if (err) {
       console.error('Error generating QR code:', err);
       return res.status(500).send('Error generating QR code');
     }
-    res.render('qr-login', { qrCodeUrl: url });
+    res.render('qr-login', { 
+      qrCodeUrl: url, 
+      sessionId: sessionId,
+      message: 'Пожалуйста, войдите в систему на мобильном устройстве перед сканированием QR-кода'
+    });
   });
 });
 
-app.get('/check-qr/:qrId', (req, res) => {
-  const qrId = req.params.qrId;
-  
-  const checkQR = () => {
-    const qrData = qrCodes[qrId];
+app.get('/auto-login/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const session = QRSessions[sessionId];
 
-    if (!qrData) {
-      return res.json({ status: 'expired' });
-    }
-
-    if (qrData.token) {
-      delete qrCodes[qrId];
-      return res.json({ status: 'confirmed', token: qrData.token });
-    }
-
-    // Если статус все еще 'pending', ждем 2 секунды и проверяем снова
-    setTimeout(checkQR, 2000);
-  };
-
-  checkQR();
-});
-
-app.get('/confirm/:qrId', authenticateJWT, (req, res) => {
-  const qrId = req.params.qrId;
-  const qrData = qrCodes[qrId];
-
-  if (!qrData) {
-    return res.status(400).send('Invalid or expired QR code');
+  if (!session) {
+    return res.status(404).send('Сессия не найдена или истекла');
   }
 
-  // Создаем новый токен для входа по QR-коду
-  const token = jwt.sign({ id: req.user.id, username: req.user.username, role: req.user.role }, JWT_SECRET, { expiresIn: '1h' });
+  const token = req.cookies.token;
+  console.log('Token from cookie:', token);
 
-  // Сохраняем токен в данных QR-кода
-  qrData.token = token;
+  if (token) {
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+      if (err) {
+        console.log('JWT verification failed:', err);
+        return res.render('login', { error: 'Требуется повторная аутентификация', redirect: `/auto-login/${sessionId}` });
+      }
+      
+      console.log('User authenticated:', user);
+      
+      session.status = 'confirmed';
+      session.token = token;
 
-  // Используем параметр redirect, если он есть, иначе переходим на dashboard
-  const redirectUrl = req.query.redirect || '/dashboard';
-  res.redirect(redirectUrl);
+      // Отправляем HTML с JavaScript для закрытия окна
+      res.send(`
+        <html>
+          <body>
+            <script>
+              window.close();
+            </script>
+            <p>Вход выполнен успешно. Это окно можно закрыть.</p>
+          </body>
+        </html>
+      `);
+    });
+  } else {
+    console.log('No token found, redirecting to login');
+    res.render('login', { error: 'Пожалуйста, войдите в систему', redirect: `/auto-login/${sessionId}` });
+  }
+});
+
+app.get('/check-qr/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const session = QRSessions[sessionId];
+
+  if (!session) {
+    return res.json({ status: 'expired' });
+  }
+
+  if (session.status === 'confirmed') {
+    const token = session.token;
+    delete QRSessions[sessionId]; // Удаляем сессию после успешного входа
+
+    // Устанавливаем куки с токеном
+    res.cookie('token', token, { 
+      httpOnly: true, 
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict'
+    });
+
+    return res.json({ status: 'confirmed' });
+  }
+
+  res.json({ status: 'pending' });
 });

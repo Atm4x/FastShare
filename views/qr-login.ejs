@@ -10,6 +10,7 @@
     <div class="login-container">
         <div class="login-box">
             <h1>Вход по QR-коду</h1>
+            <p><%= message %></p>
             <img src="<%= qrCodeUrl %>" alt="QR Code" style="display: block; margin: 0 auto;">
             <p>Отсканируйте QR-код с помощью мобильного устройства для входа</p>
         </div>
@@ -17,18 +18,17 @@
 
     <script>
         function checkQRStatus() {
-            const qrId = '<%= qrCodeUrl.split('/').pop() %>';
-            fetch(`/check-qr/${qrId}`)
+            const sessionId = '<%= sessionId %>';
+            fetch(`/check-qr/${sessionId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'confirmed') {
-                        document.cookie = `token=${data.token}; path=/; HttpOnly; Secure; SameSite=Strict`;
+                        alert('Вход выполнен успешно!');
                         window.location.href = '/dashboard';
                     } else if (data.status === 'expired') {
                         alert('QR-код истек. Пожалуйста, обновите страницу для получения нового кода.');
                     } else {
-                        // Если статус 'pending', сразу вызываем следующую проверку
-                        checkQRStatus();
+                        setTimeout(checkQRStatus, 2000); // Проверяем каждые 2 секунды
                     }
                 })
                 .catch(error => {

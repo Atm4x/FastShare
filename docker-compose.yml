@@ -3,9 +3,10 @@ services:
   app:
     build: .
     ports:
-      - "8080:8080"
+      - "23002:23002"
     volumes:
       - ./data:/app/data
     environment:
       - NODE_ENV=production
-      - PORT=8080
+      - PORT=23002
+      - BASE_URL=fshare.tubik-corp.ru
