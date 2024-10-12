@@ -381,9 +381,9 @@ setInterval(cleanupQRSessions, 5 * 60 * 1000); // Очистка каждые 5 
 
 app.get('/qr-login', (req, res) => {
   const sessionId = generateQRSession();
-  const qrData = JSON.stringify({ action: 'login', sessionId: sessionId });
+  const loginUrl = `${process.env.BASE_URL}/auto-login/${sessionId}`;
   
-  QRCode.toDataURL(qrData, (err, url) => {
+  QRCode.toDataURL(loginUrl, (err, url) => {
     if (err) {
       console.error('Error generating QR code:', err);
       return res.status(500).send('Error generating QR code');
@@ -392,20 +392,32 @@ app.get('/qr-login', (req, res) => {
   });
 });
 
-app.post('/confirm-qr', authenticateJWT, (req, res) => {
-  const { sessionId } = req.body;
+app.get('/auto-login/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
   const session = QRSessions[sessionId];
 
   if (!session) {
-    return res.status(404).json({ error: 'Session not found' });
+    return res.status(404).send('Сессия не найдена или истекла');
   }
 
-  const token = jwt.sign({ id: req.user.id, username: req.user.username, role: req.user.role }, JWT_SECRET, { expiresIn: '1h' });
+  // Генерируем токен
+  const token = jwt.sign({ id: Date.now(), username: 'qr_user', role: 'user' }, JWT_SECRET, { expiresIn: '1h' });
   
   session.status = 'confirmed';
   session.token = token;
 
-  res.json({ success: true });
+  // Отправляем HTML с JavaScript для установки куки и закрытия окна
+  res.send(`
+    <html>
+      <body>
+        <script>
+          document.cookie = "token=${token}; path=/; HttpOnly; Secure; SameSite=Strict";
+          window.close();
+        </script>
+        <p>Вход выполнен успешно. Это окно можно закрыть.</p>
+      </body>
+    </html>
+  `);
 });
 
 app.get('/check-qr/:sessionId', (req, res) => {
