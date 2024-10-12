@@ -9,3 +9,4 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=23002
+      - BASE_URL=fshare.tubik-corp.ru

@@ -22,8 +22,6 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'confirmed') {
-                        // Устанавливаем куки с токеном
-                        document.cookie = `token=${data.token}; path=/; HttpOnly; Secure; SameSite=Strict`;
                         alert('Вход выполнен успешно!');
                         window.location.href = '/dashboard';
                     } else if (data.status === 'expired') {

@@ -59,16 +59,6 @@ const authenticateJWT = (req, res, next) => {
     }
   };
 
-// Middleware для проверки роли
-const checkRole = (role) => {
-  return (req, res, next) => {
-    if (req.user && req.user.role === role) {
-      next();
-    } else {
-      res.status(403).send('Доступ запрещен');
-    }
-  };
-};
 
 const getDataDir = () => {
     let dir;
@@ -401,17 +391,23 @@ app.get('/auto-login/:sessionId', (req, res) => {
   }
 
   // Генерируем токен
-  const token = jwt.sign({ id: Date.now(), username: 'qr_user', role: 'user' }, JWT_SECRET, { expiresIn: '1h' });
+  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
   
   session.status = 'confirmed';
   session.token = token;
 
-  // Отправляем HTML с JavaScript для установки куки и закрытия окна
+  // Устанавливаем куки с токеном
+  res.cookie('token', token, { 
+    httpOnly: true, 
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict'
+  });
+
+  // Отправляем HTML с JavaScript для закрытия окна
   res.send(`
     <html>
       <body>
         <script>
-          document.cookie = "token=${token}; path=/; HttpOnly; Secure; SameSite=Strict";
           window.close();
         </script>
         <p>Вход выполнен успешно. Это окно можно закрыть.</p>
