@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход по QR-коду</title>
+    <link rel="stylesheet" href="/login-styles.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <h1>Вход по QR-коду</h1>
+            <img src="<%= qrCodeUrl %>" alt="QR Code" style="display: block; margin: 0 auto;">
+            <p>Отсканируйте QR-код с помощью мобильного устройства для входа</p>
+        </div>
+    </div>
+
+    <script>
+        function checkQRStatus() {
+            const qrId = '<%= qrCodeUrl.split('/').pop() %>';
+            fetch(`/check-qr/${qrId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'confirmed') {
+                        document.cookie = `token=${data.token}; path=/; HttpOnly; Secure; SameSite=Strict`;
+                        window.location.href = '/dashboard';
+                    } else if (data.status === 'expired') {
+                        alert('QR-код истек. Пожалуйста, обновите страницу для получения нового кода.');
+                    } else {
+                        setTimeout(checkQRStatus, 5000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking QR status:', error);
+                    setTimeout(checkQRStatus, 5000);
+                });
+        }
+
+        checkQRStatus();
+    </script>
+</body>
+</html>
