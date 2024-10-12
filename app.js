@@ -59,6 +59,22 @@ const authenticateJWT = (req, res, next) => {
     }
   };
 
+  const authenticateJWTMobile = (req, res, next) => {
+    const token = req.cookies.token;
+  
+    if (token) {
+      jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) {
+          return res.status(403).send('Требуется аутентификация');
+        }
+        req.user = user;
+        next();
+      });
+    } else {
+      res.status(401).send('Требуется аутентификация');
+    }
+  };
+
 
 const getDataDir = () => {
     let dir;
@@ -378,11 +394,15 @@ app.get('/qr-login', (req, res) => {
       console.error('Error generating QR code:', err);
       return res.status(500).send('Error generating QR code');
     }
-    res.render('qr-login', { qrCodeUrl: url, sessionId: sessionId });
+    res.render('qr-login', { 
+      qrCodeUrl: url, 
+      sessionId: sessionId,
+      message: 'Пожалуйста, войдите в систему на мобильном устройстве перед сканированием QR-кода'
+    });
   });
 });
 
-app.get('/auto-login/:sessionId', (req, res) => {
+app.get('/auto-login/:sessionId', authenticateJWT, (req, res) => {
   const { sessionId } = req.params;
   const session = QRSessions[sessionId];
 
@@ -390,18 +410,11 @@ app.get('/auto-login/:sessionId', (req, res) => {
     return res.status(404).send('Сессия не найдена или истекла');
   }
 
-  // Генерируем токен
-  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
+  // Используем токен аутентифицированного пользователя
+  const token = req.cookies.token;
   
   session.status = 'confirmed';
   session.token = token;
-
-  // Устанавливаем куки с токеном
-  res.cookie('token', token, { 
-    httpOnly: true, 
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict'
-  });
 
   // Отправляем HTML с JavaScript для закрытия окна
   res.send(`
