@@ -17,8 +17,8 @@
 
     <script>
         function checkQRStatus() {
-            const qrId = '<%= qrCodeUrl.split('/').pop() %>';
-            fetch(`/check-qr/${qrId}`)
+            const sessionId = '<%= sessionId %>';
+            fetch(`/check-qr/${sessionId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'confirmed') {
@@ -27,8 +27,7 @@
                     } else if (data.status === 'expired') {
                         alert('QR-код истек. Пожалуйста, обновите страницу для получения нового кода.');
                     } else {
-                        // Если статус 'pending', сразу вызываем следующую проверку
-                        checkQRStatus();
+                        setTimeout(checkQRStatus, 2000); // Проверяем каждые 2 секунды
                     }
                 })
                 .catch(error => {

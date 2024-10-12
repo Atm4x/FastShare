@@ -356,60 +356,71 @@ app.listen(port, () => {
 
 
 
-const qrCodes = {};
+const QRSessions = {};
 
-function cleanupQRCodes() {
+function generateQRSession() {
+  const sessionId = crypto.randomBytes(16).toString('hex');
+  QRSessions[sessionId] = {
+    createdAt: Date.now(),
+    status: 'pending',
+    token: null
+  };
+  return sessionId;
+}
+
+function cleanupQRSessions() {
   const now = Date.now();
-  Object.keys(qrCodes).forEach(key => {
-    if (now - qrCodes[key].createdAt > 30 * 60 * 1000) { // увеличиваем до 30 минут
-      delete qrCodes[key];
+  Object.keys(QRSessions).forEach(key => {
+    if (now - QRSessions[key].createdAt > 10 * 60 * 1000) { // 10 минут
+      delete QRSessions[key];
     }
   });
 }
 
-setInterval(cleanupQRCodes, 30 * 60 * 1000); // проверяем каждые 30 минут
+setInterval(cleanupQRSessions, 5 * 60 * 1000); // Очистка каждые 5 минут
 
 app.get('/qr-login', (req, res) => {
-  const qrId = uuidv4();
-  const qrData = {
-    id: qrId,
-    createdAt: Date.now(),
-    status: 'pending'
-  };
-  qrCodes[qrId] = qrData;
-
-  QRCode.toDataURL(`${req.protocol}://${req.get('host')}/confirm/${qrId}`, (err, url) => {
+  const sessionId = generateQRSession();
+  const qrData = JSON.stringify({ action: 'login', sessionId: sessionId });
+  
+  QRCode.toDataURL(qrData, (err, url) => {
     if (err) {
       console.error('Error generating QR code:', err);
       return res.status(500).send('Error generating QR code');
     }
-    res.render('qr-login', { qrCodeUrl: url, qrId: qrId });
+    res.render('qr-login', { qrCodeUrl: url, sessionId: sessionId });
   });
 });
 
-app.get('/check-qr/:qrId', (req, res) => {
-  const qrId = req.params.qrId;
-  const qrData = qrCodes[qrId];
+app.post('/confirm-qr', authenticateJWT, (req, res) => {
+  const { sessionId } = req.body;
+  const session = QRSessions[sessionId];
 
-  if (!qrData) {
-    return res.json({ status: 'expired' });
-  }
-
-  res.json({ status: qrData.status, token: qrData.token });
-});
-
-app.get('/confirm/:qrId', authenticateJWT, (req, res) => {
-  const qrId = req.params.qrId;
-  const qrData = qrCodes[qrId];
-
-  if (!qrData) {
-    return res.status(400).send('Invalid or expired QR code');
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
   }
 
   const token = jwt.sign({ id: req.user.id, username: req.user.username, role: req.user.role }, JWT_SECRET, { expiresIn: '1h' });
+  
+  session.status = 'confirmed';
+  session.token = token;
 
-  qrData.status = 'confirmed';
-  qrData.token = token;
+  res.json({ success: true });
+});
 
-  res.send('QR code confirmed. You can close this page and return to the original device.');
+app.get('/check-qr/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const session = QRSessions[sessionId];
+
+  if (!session) {
+    return res.json({ status: 'expired' });
+  }
+
+  if (session.status === 'confirmed') {
+    const token = session.token;
+    delete QRSessions[sessionId]; // Удаляем сессию после успешного входа
+    return res.json({ status: 'confirmed', token });
+  }
+
+  res.json({ status: 'pending' });
 });
