@@ -27,7 +27,8 @@
                     } else if (data.status === 'expired') {
                         alert('QR-код истек. Пожалуйста, обновите страницу для получения нового кода.');
                     } else {
-                        setTimeout(checkQRStatus, 5000);
+                        // Если статус 'pending', сразу вызываем следующую проверку
+                        checkQRStatus();
                     }
                 })
                 .catch(error => {
@@ -35,7 +36,7 @@
                     setTimeout(checkQRStatus, 5000);
                 });
         }
-
+    
         checkQRStatus();
     </script>
 </body>

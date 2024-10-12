@@ -29,7 +29,13 @@
                 </div>
                 <button type="submit">Войти</button>
             </form>
+            <button id="qr-login-btn" type="button">Войти по QR-коду</button>
         </div>
     </div>
+    <script>
+        document.getElementById('qr-login-btn').addEventListener('click', function() {
+            window.location.href = '/qr-login';
+        });
+    </script>
 </body>
 </html>
